@@ -1,124 +1,127 @@
-# `model-anim-selector` para A-Frame
+# aframe-model-anim-selector
 
-Componente para **A-Frame** que permite seleccionar dinámicamente modelos/partes (`SkinnedMesh` o grupos) y reproducir animaciones de pistas NLA (*Non-Linear Animation*) a partir de un único archivo glTF/GLB con esqueleto compartido.
-
----
-
-## 📌 ¿Por qué este componente?
-
-Al trabajar con modelos exportados desde Blender donde conviven múltiples atuendos o variaciones sobre una misma armadura (*Armature*):
-
-1. **Incompatibilidad entre `gltf-part` y `animation-mixer`**:
-   - `gltf-part` extrae la malla de forma aislada, rompiendo la vinculación con los huesos (`mesh.skeleton.bones`). Al quedar huérfana de su esqueleto, la malla colapsa o no se renderiza.
-   - `animation-mixer` anima los huesos del esqueleto, no las mallas directamente. Al no estar la jerarquía completa en el grafo de escena, no encuentra los objetivos de animación.
-2. **Estructura de Grupos en Three.js**:
-   - Cuando una parte tiene múltiples materiales/primitivas, Three.js crea un nodo `THREE.Group` con el nombre del modelo y mallas hijas con nombres internos.
-3. **Solución de `model-anim-selector`**:
-   - Mantiene intacto el esqueleto activo para que la cinemática de huesos y pistas NLA funcionen al 100%.
-   - Conmuta de forma segura la visibilidad (`visible = true/false`) de las mallas y sus grupos contenedores por nombre o ID, evitando *z-fighting*.
-   - Incluye *cross-fading* suave entre animaciones, control de velocidad y clonación segura de huesos para múltiples instancias simultáneas.
+An A-Frame component designed to dynamically select models or mesh parts (`SkinnedMesh` or groups) and play Non-Linear Animation (NLA) clips from a single glTF/GLB file sharing a common armature.
 
 ---
 
-## 🚀 Instalación y Requisitos
+## Background and Problem Statement
 
-Solo requieres incluir **A-Frame** (1.4.0 o superior, recomendado 1.6.0) y el script del componente:
+When working with models exported from Blender where multiple outfits or mesh variations share a single skeleton/armature:
+
+1. **Incompatibility between `gltf-part` and `animation-mixer`**:
+   - `gltf-part` isolates and detaches only the specified mesh node from the armature hierarchy. For `SkinnedMesh` instances, vertex deformations rely on bone matrices (`JOINTS_0`, `WEIGHTS_0`, `bindMatrixInverse`). When detached from the bone hierarchy, the skinned mesh collapses or fails to render.
+   - `animation-mixer` targets and animates the skeleton bones rather than the mesh nodes directly. If the skeleton is broken or separated from the scene graph, the animation tracks fail to find their targets.
+2. **Three.js Group Node Structures**:
+   - When a mesh contains multiple primitives or materials, Three.js creates a parent `THREE.Group` node named after the model, while individual sub-meshes receive primitive-specific internal names.
+3. **How `model-anim-selector` solves this**:
+   - Keeps the full armature hierarchy and all bones intact and active so skeletal kinematics and NLA tracks work uninterrupted.
+   - Safely toggles the visibility (`visible = true/false`) of target meshes and parent groups by name or ID, eliminating z-fighting and rendering overhead.
+   - Features built-in smooth cross-fading between animations, playback speed control, and bone-safe cloning (`cloneSkinnedHierarchy`) so multiple instances can exist simultaneously in the same scene without bone crosstalk.
+
+---
+
+## Installation
+
+Include A-Frame (1.4.0 or higher, 1.6.0 recommended) and the component script:
 
 ```html
 <!-- A-Frame -->
 <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
 
-<!-- Componente model-anim-selector -->
+<!-- model-anim-selector component -->
 <script src="model-anim-selector.js"></script>
 ```
 
 ---
 
-## 📖 Uso Básico
+## Basic Usage
 
-Coloca el componente en una entidad `<a-entity>` indicando la ruta del GLB, el modelo a mostrar y el clip de animación:
+Attach the component to an `<a-entity>`, specifying the GLB source, the active model/part ID, and the animation clip:
 
 ```html
 <a-scene>
-  <!-- Luz básica -->
+  <!-- Basic Lighting -->
   <a-entity light="type: ambient; intensity: 0.8;"></a-entity>
   <a-entity light="type: directional; intensity: 1.2;" position="2 4 3"></a-entity>
 
-  <!-- Personaje con el componente -->
+  <!-- Ground Plane -->
+  <a-plane rotation="-90 0 0" width="10" height="10" color="#2b2b30"></a-plane>
+
+  <!-- Character Entity using the Component -->
   <a-entity
-    id="mi-personaje"
+    id="character"
     position="0 0 -2.5"
     model-anim-selector="src: Personaje.glb; model: Ropa1; clip: Iddle;">
   </a-entity>
 
-  <!-- Cámara frontal -->
+  <!-- Default Camera -->
   <a-camera position="0 1.0 0"></a-camera>
 </a-scene>
 ```
 
 ---
 
-## ⚙️ Esquema de Propiedades (Schema)
+## Component Schema
 
-| Propiedad | Tipo | Valor por Defecto | Descripción |
+| Property | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `src` | `string` | `""` | Ruta directa al archivo GLB (ej. `Personaje.glb`) o selector de asset (ej. `#mi-asset`). |
-| `model` | `string` | `"Ropa1"` | Nombre o ID del modelo/parte a mostrar. Permite listas separadas por coma (ej. `Ropa3, GuantesRopa3`) o `*` para mostrar todas las mallas. |
-| `clip` | `string` | `"Iddle"` | Nombre de la pista de animación NLA a reproducir (ej. `Iddle`, `CaminandoAdelante`, `CaminandoLado`). |
-| `loop` | `string` | `"repeat"` | Modo de repetición: `repeat`, `once`, `pingpong`. |
-| `timeScale` | `number` | `1.0` | Velocidad de reproducción (ej. `0.5` para cámara lenta, `2.0` para rápido). |
-| `crossFade` | `number` | `0.35` | Duración en segundos de la transición suave entre animaciones. |
-| `autoplay` | `boolean` | `true` | Si debe iniciar la animación automáticamente al cargar el modelo. |
-| `clampWhenFinished` | `boolean` | `false` | Si es `true` y `loop` es `once`, congela la animación en el último fotograma. |
-| `shadows` | `boolean` | `true` | Configura automáticamente `castShadow` y `receiveShadow` en las mallas. |
+| `src` | `string` | `""` | Direct path to the GLB file (e.g. `Personaje.glb`) or asset selector (e.g. `#my-asset`). |
+| `model` | `string` | `"Ropa1"` | Name or ID of the model/part to display. Supports comma-separated lists (e.g. `Ropa3, GuantesRopa3`) or `*` to display all meshes. |
+| `clip` | `string` | `"Iddle"` | Name of the NLA animation clip to play (e.g. `Iddle`, `CaminandoAdelante`, `CaminandoLado`). |
+| `loop` | `string` | `"repeat"` | Playback loop mode: `repeat`, `once`, `pingpong`. |
+| `timeScale` | `number` | `1.0` | Playback speed multiplier (e.g. `0.5` for half speed, `2.0` for double speed). |
+| `crossFade` | `number` | `0.35` | Duration in seconds for smooth blending between animation clips. |
+| `autoplay` | `boolean` | `true` | Automatically starts animation playback upon loading. |
+| `clampWhenFinished` | `boolean` | `false` | When `true` and `loop` is `once`, pauses on the final frame instead of resetting. |
+| `shadows` | `boolean` | `true` | Automatically enables `castShadow` and `receiveShadow` across all model meshes. |
 
 ---
 
-## 💡 Ejemplos Prácticos
+## Examples
 
-### 1. Cambiar Modelo o Animación con JavaScript
-Puedes modificar los atributos de forma reactiva en cualquier momento:
+### 1. Changing Model or Animation via JavaScript
+Attributes can be modified reactively at runtime:
 
 ```javascript
-const personaje = document.querySelector('#mi-personaje');
+const character = document.querySelector('#character');
 
-// Cambiar a Ropa 2
-personaje.setAttribute('model-anim-selector', 'model', 'Ropa2');
+// Switch outfit / model
+character.setAttribute('model-anim-selector', 'model', 'Ropa2');
 
-// Cambiar a animación de caminar
-personaje.setAttribute('model-anim-selector', 'clip', 'CaminandoAdelante');
+// Switch animation clip
+character.setAttribute('model-anim-selector', 'clip', 'CaminandoAdelante');
 
-// Cambiar velocidad de animación
-personaje.setAttribute('model-anim-selector', 'timeScale', 1.5);
+// Adjust playback speed
+character.setAttribute('model-anim-selector', 'timeScale', 1.5);
 ```
 
-### 2. Mostrar un Atuendo con Accesorios (Múltiples Partes)
-Puedes pasar partes separadas por coma para mostrar atuendos y accesorios a la vez:
+### 2. Combining Outfits and Accessories (Multiple Parts)
+Pass comma-separated part names to display base outfits together with optional accessories:
 
 ```html
-<!-- Muestra Ropa3 junto con sus guantes y credencial -->
+<!-- Displays Outfit 3 with matching gloves and badge -->
 <a-entity
   model-anim-selector="src: Personaje.glb; model: Ropa3, GuantesRopa3, Gafete; clip: CaminandoLado;">
 </a-entity>
 ```
 
-### 3. Varios Personajes Simultáneos en Escena
-Gracias a la clonación segura de esqueleto interna, puedes instanciar varios personajes a partir del mismo archivo sin que sus huesos o animaciones interfieran entre sí:
+### 3. Multiple Simultaneous Characters in the Same Scene
+Due to internal skeleton rebinding (`cloneSkinnedHierarchy`), multiple entities can load the same asset simultaneously without interfering with each other's bones or playback:
 
 ```html
-<!-- Personaje 1 en reposo -->
+<!-- Character 1: Outfit 1 in Idle pose -->
 <a-entity
   position="-1.5 0 -3"
   model-anim-selector="src: Personaje.glb; model: Ropa1; clip: Iddle;">
 </a-entity>
 
-<!-- Personaje 2 caminando -->
+<!-- Character 2: Outfit 2 walking forward -->
 <a-entity
   position="0 0 -3"
   model-anim-selector="src: Personaje.glb; model: Ropa2; clip: CaminandoAdelante;">
 </a-entity>
 
-<!-- Personaje 3 caminando de lado -->
+<!-- Character 3: Outfit 3 with gloves walking sideways -->
 <a-entity
   position="1.5 0 -3"
   model-anim-selector="src: Personaje.glb; model: Ropa3, GuantesRopa3; clip: CaminandoLado;">
@@ -127,59 +130,59 @@ Gracias a la clonación segura de esqueleto interna, puedes instanciar varios pe
 
 ---
 
-## 🛠️ API en JavaScript (Métodos Públicos)
+## JavaScript API
 
-Accede a la instancia del componente a través de `el.components['model-anim-selector']`:
+Access the component instance via `el.components['model-anim-selector']`:
 
 ```javascript
-const comp = document.querySelector('#mi-personaje').components['model-anim-selector'];
+const comp = document.querySelector('#character').components['model-anim-selector'];
 
-// Métodos de control
-comp.setModel('Ropa2');             // Cambia el modelo activo
-comp.setClip('CaminandoAdelante');   // Cambia la animación con cross-fade
-comp.setTimeScale(1.2);              // Cambia velocidad
-comp.togglePause();                  // Alterna entre pausa y reanudación
-comp.pause();                        // Pausa la animación
-comp.resume();                       // Reanuda la animación
+// Control Methods
+comp.setModel('Ropa2');             // Changes active model/outfit
+comp.setClip('CaminandoAdelante');   // Changes animation with crossfade
+comp.setTimeScale(1.2);              // Sets playback speed
+comp.togglePause();                  // Toggles pause / play
+comp.pause();                        // Pauses playback
+comp.resume();                       // Resumes playback
 
-// Consultas e inspección automática del GLB
-console.log(comp.getModels());       // Retorna array con las mallas/partes detectadas
-console.log(comp.getClips());        // Retorna array con los clips NLA detectados
-console.log(comp.getCurrentTime());  // Tiempo actual en segundos del clip
-console.log(comp.getDuration());     // Duración total del clip
+// Inspection and Queries
+console.log(comp.getModels());       // Returns array of detected meshes/parts with visibility state
+console.log(comp.getClips());        // Returns array of detected NLA clips and durations
+console.log(comp.getCurrentTime());  // Current playback time in seconds
+console.log(comp.getDuration());     // Total duration of current clip in seconds
 ```
 
 ---
 
-## 🔔 Eventos Emitidos
+## Events
 
-El componente emite eventos estándar del DOM sobre la entidad:
+The component emits standard DOM events on the host entity:
 
-| Evento | Detalle (`e.detail`) | Descripción |
+| Event | Detail (`e.detail`) | Description |
 | :--- | :--- | :--- |
-| `model-anim-ready` | `{ models, clips, activeModel, activeClip }` | Se dispara cuando el modelo y el mezclador de animaciones están listos. |
-| `model-changed` | `{ selectedModel, visibleMeshesCount }` | Se dispara al cambiar la selección de modelo/partes. |
-| `clip-changed` | `{ clipName, duration }` | Se dispara al cambiar de clip de animación. |
-| `clip-finished` | `{ action, clipName }` | Se dispara cuando un clip sin repetición (`loop: once`) concluye. |
-| `clip-loop` | `{ action, clipName, loopDelta }` | Se dispara cada vez que un ciclo de animación se repite. |
+| `model-anim-ready` | `{ models, clips, activeModel, activeClip }` | Fired when the model and animation mixer have completed initialization. |
+| `model-changed` | `{ selectedModel, visibleMeshesCount }` | Fired when the active model or part filter changes. |
+| `clip-changed` | `{ clipName, duration }` | Fired when a new animation clip starts playing. |
+| `clip-finished` | `{ action, clipName }` | Fired when a non-looping clip completes playback. |
+| `clip-loop` | `{ action, clipName, loopDelta }` | Fired each time an animation loop repeats. |
 
 ```javascript
-const el = document.querySelector('#mi-personaje');
+const el = document.querySelector('#character');
 
 el.addEventListener('model-anim-ready', (e) => {
-  console.log('Modelos disponibles en el GLB:', e.detail.models);
-  console.log('Animaciones NLA disponibles:', e.detail.clips);
+  console.log('Available models:', e.detail.models);
+  console.log('Available clips:', e.detail.clips);
 });
 
 el.addEventListener('clip-changed', (e) => {
-  console.log(`Reproduciendo ahora: ${e.detail.clipName} (${e.detail.duration}s)`);
+  console.log(`Now playing: ${e.detail.clipName} (${e.detail.duration}s)`);
 });
 ```
 
 ---
 
-## 📁 Archivos del Proyecto
+## Project Structure
 
-- `model-anim-selector.js`: Código fuente del componente A-Frame.
-- `index.html`: Ejemplo mínimo funcional listo para visualizar en el navegador.
-- `Personaje.glb`: Modelo 3D de muestra con mallas de atuendos (`Ropa1`, `Ropa2`, `Ropa3`) y animaciones NLA (`Iddle`, `CaminandoAdelante`, `CaminandoLado`).
+- `model-anim-selector.js`: Core A-Frame component implementation.
+- `index.html`: Minimal working showcase demonstrating model and animation selection.
+- `Personaje.glb`: Sample 3D character asset containing multiple outfit variations and NLA animation clips.
